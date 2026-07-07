@@ -3,19 +3,9 @@
   hosts: all
   become: true
   vars_files:
-    - vars.yml
-  vars:
-    homelab_repo_url: https://github.com/My-declarative-PC/homelab-composes.git
-    homelab_dir: /srv/homelab
-    linuxbrew_prefix: /home/linuxbrew/.linuxbrew
-    linuxbrew_packages:
-      - chezmoi
-      - fish
-      - gum
-      - helix
-      - lazydocker
-      - lazygit
-      - zellij
+    - vars/user.yml
+    - vars/linuxbrew.yml
+    - vars/homelab.yml
 
   handlers:
     - name: Restart ssh
@@ -33,7 +23,7 @@
           - main_user_ssh_public_keys is iterable
           - main_user_ssh_public_keys is not string
         fail_msg: >-
-          Create vars.yml from vars.example.yml and set main_user and
+          Create vars/user.yml from vars/user.example.yml and set main_user and
           main_user_ssh_public_keys. main_user_ssh_public_keys can be an empty list.
 
     - name: Update apt cache

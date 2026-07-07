@@ -12,24 +12,30 @@
 
 Перед запуском укажите адрес сервера в `inventory.yml`.
 
-Создайте локальный файл переменных:
+Создайте локальный файл пользовательских переменных:
 
 ```bash
-cp vars.example.yml vars.yml
+cp vars/user.example.yml vars/user.yml
 ```
 
-Заполните в `vars.yml` пользователя и SSH-ключи:
+Заполните пользователя в `vars/user.yml`:
 
 ```yaml
 main_user: timofey
+```
 
+Заполните SSH-ключи там же:
+
+```yaml
 main_user_ssh_public_keys:
   - "ssh-ed25519 AAAA... user@example"
 ```
 
-`vars.yml` обязателен и не коммитится. Если VPS автоматически прокидывает
-ключи в `/root/.ssh/authorized_keys`, `main_user_ssh_public_keys` можно оставить
-пустым списком:
+Локальный `vars/user.yml` обязателен и не коммитится. `vars/linuxbrew.yml` и
+`vars/homelab.yml` версионируются, потому что содержат квазистатическую
+конфигурацию. Если VPS автоматически прокидывает ключи в
+`/root/.ssh/authorized_keys`, `main_user_ssh_public_keys` можно оставить пустым
+списком:
 
 ```yaml
 main_user_ssh_public_keys: []

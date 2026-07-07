@@ -1,0 +1,9 @@
+linuxbrew_prefix: /home/linuxbrew/.linuxbrew
+linuxbrew_packages:
+  - chezmoi
+  - fish
+  - gum
+  - helix
+  - lazydocker
+  - lazygit
+  - zellij
