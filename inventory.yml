@@ -1,0 +1,5 @@
+all:
+  hosts:
+    vps:
+      ansible_host: example.com
+      ansible_user: root

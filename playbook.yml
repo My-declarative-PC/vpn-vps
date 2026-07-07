@@ -1,0 +1,237 @@
+---
+- name: Configure Ubuntu VPS
+  hosts: all
+  become: true
+  vars:
+    main_user: timofey
+    main_user_ssh_public_keys: []
+    homelab_repo_url: https://github.com/My-declarative-PC/homelab-composes.git
+    homelab_dir: /srv/homelab
+    linuxbrew_prefix: /home/linuxbrew/.linuxbrew
+    linuxbrew_packages:
+      - chezmoi
+      - fish
+      - gum
+      - helix
+      - lazydocker
+      - lazygit
+      - zellij
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Fully upgrade system
+      ansible.builtin.apt:
+        upgrade: full
+        autoremove: true
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - ca-certificates
+          - curl
+          - file
+          - git
+          - gnupg
+          - linux-headers-{{ ansible_kernel }}
+          - procps
+          - python3-launchpadlib
+          - software-properties-common
+          - sudo
+        state: present
+
+    - name: Create apt keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install Docker apt key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add Docker apt repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.sources
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Types: deb
+          URIs: https://download.docker.com/linux/ubuntu
+          Suites: {{ ansible_distribution_release }}
+          Components: stable
+          Architectures: {{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
+          Signed-By: /etc/apt/keyrings/docker.asc
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-ce
+          - docker-ce-cli
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create main user
+      ansible.builtin.user:
+        name: "{{ main_user }}"
+        shell: /bin/bash
+        create_home: true
+        groups:
+          - sudo
+          - docker
+        append: true
+
+    - name: Allow passwordless sudo for main user
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ main_user }}"
+        content: "{{ main_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Check root authorized_keys
+      ansible.builtin.stat:
+        path: /root/.ssh/authorized_keys
+      register: root_authorized_keys_stat
+
+    - name: Read root authorized_keys
+      ansible.builtin.slurp:
+        path: /root/.ssh/authorized_keys
+      register: root_authorized_keys_raw
+      when: root_authorized_keys_stat.stat.exists
+
+    - name: Build main user SSH key list
+      ansible.builtin.set_fact:
+        main_user_authorized_keys: >-
+          {{
+            (
+              (root_authorized_keys_raw.content | default('') | b64decode).splitlines()
+              if root_authorized_keys_stat.stat.exists else []
+            )
+            + main_user_ssh_public_keys
+          }}
+
+    - name: Keep only non-empty SSH keys
+      ansible.builtin.set_fact:
+        main_user_authorized_keys: "{{ main_user_authorized_keys | map('trim') | reject('equalto', '') | unique | list }}"
+
+    - name: Abort before locking SSH access if main user has no keys
+      ansible.builtin.assert:
+        that:
+          - main_user_authorized_keys | length > 0
+        fail_msg: >-
+          No SSH public keys found for {{ main_user }}. Add keys to
+          main_user_ssh_public_keys or make sure /root/.ssh/authorized_keys exists.
+
+    - name: Create main user .ssh directory
+      ansible.builtin.file:
+        path: "/home/{{ main_user }}/.ssh"
+        state: directory
+        owner: "{{ main_user }}"
+        group: "{{ main_user }}"
+        mode: "0700"
+
+    - name: Install authorized_keys for main user
+      ansible.builtin.copy:
+        dest: "/home/{{ main_user }}/.ssh/authorized_keys"
+        content: "{{ main_user_authorized_keys | join('\n') }}\n"
+        owner: "{{ main_user }}"
+        group: "{{ main_user }}"
+        mode: "0600"
+
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication\s+'
+        line: PasswordAuthentication no
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Restart ssh
+
+    - name: Disable SSH root login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin\s+'
+        line: PermitRootLogin no
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Restart ssh
+
+    - name: Add AmneziaWG PPA
+      ansible.builtin.apt_repository:
+        repo: ppa:amnezia/ppa
+        state: present
+        update_cache: true
+
+    - name: Install AmneziaWG
+      ansible.builtin.apt:
+        name: amneziawg
+        state: present
+
+    - name: Install Linuxbrew
+      ansible.builtin.shell: >-
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+      args:
+        creates: "{{ linuxbrew_prefix }}/bin/brew"
+      become_user: "{{ main_user }}"
+      environment:
+        NONINTERACTIVE: "1"
+
+    - name: Add Linuxbrew shellenv to main user profile
+      ansible.builtin.lineinfile:
+        path: "/home/{{ main_user }}/.profile"
+        line: 'eval "$({{ linuxbrew_prefix }}/bin/brew shellenv)"'
+        create: true
+        owner: "{{ main_user }}"
+        group: "{{ main_user }}"
+        mode: "0644"
+
+    - name: Install Linuxbrew packages
+      ansible.builtin.command:
+        cmd: "{{ linuxbrew_prefix }}/bin/brew install {{ item }}"
+      loop: "{{ linuxbrew_packages }}"
+      become_user: "{{ main_user }}"
+      when: linuxbrew_packages | length > 0
+      register: linuxbrew_package_install
+      changed_when: "'already installed' not in linuxbrew_package_install.stderr"
+
+    - name: Create homelab directory
+      ansible.builtin.file:
+        path: "{{ homelab_dir }}"
+        state: directory
+        owner: "{{ main_user }}"
+        group: "{{ main_user }}"
+        mode: "0755"
+
+    - name: Clone homelab compose repository
+      ansible.builtin.git:
+        repo: "{{ homelab_repo_url }}"
+        dest: "{{ homelab_dir }}"
+        version: HEAD
+        update: true
+      become_user: "{{ main_user }}"
