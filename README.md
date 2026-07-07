@@ -12,11 +12,37 @@
 
 Перед запуском укажите адрес сервера в `inventory.yml`.
 
+Создайте локальный файл переменных:
+
+```bash
+cp vars.example.yml vars.yml
+```
+
+Заполните в `vars.yml` пользователя и SSH-ключи:
+
+```yaml
+main_user: timofey
+
+main_user_ssh_public_keys:
+  - "ssh-ed25519 AAAA... user@example"
+```
+
+`vars.yml` обязателен и не коммитится. Если VPS автоматически прокидывает
+ключи в `/root/.ssh/authorized_keys`, `main_user_ssh_public_keys` можно оставить
+пустым списком:
+
+```yaml
+main_user_ssh_public_keys: []
+```
+
+Playbook остановится до отключения SSH-доступа по паролю и для `root`, если не
+найдёт ни root-ключей, ни ключей из `main_user_ssh_public_keys`.
+
 ```bash
 ansible-playbook playbook.yml
 ```
 
-Если VPS не прокидывает SSH-ключи в `/root/.ssh/authorized_keys`, передайте ключ явно:
+При необходимости ключ можно переопределить через `-e`:
 
 ```bash
 ansible-playbook playbook.yml \

@@ -2,9 +2,9 @@
 - name: Configure Ubuntu VPS
   hosts: all
   become: true
+  vars_files:
+    - vars.yml
   vars:
-    main_user: timofey
-    main_user_ssh_public_keys: []
     homelab_repo_url: https://github.com/My-declarative-PC/homelab-composes.git
     homelab_dir: /srv/homelab
     linuxbrew_prefix: /home/linuxbrew/.linuxbrew
@@ -24,6 +24,18 @@
         state: restarted
 
   tasks:
+    - name: Validate required vars
+      ansible.builtin.assert:
+        that:
+          - main_user is defined
+          - main_user | length > 0
+          - main_user_ssh_public_keys is defined
+          - main_user_ssh_public_keys is iterable
+          - main_user_ssh_public_keys is not string
+        fail_msg: >-
+          Create vars.yml from vars.example.yml and set main_user and
+          main_user_ssh_public_keys. main_user_ssh_public_keys can be an empty list.
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true

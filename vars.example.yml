@@ -1,0 +1,6 @@
+main_user: timofey
+
+# Можно оставить пустым списком, если VPS автоматически прокидывает
+# SSH-ключи в /root/.ssh/authorized_keys.
+main_user_ssh_public_keys:
+  - "ssh-ed25519 AAAA... user@example"
