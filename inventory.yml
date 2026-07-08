@@ -1,5 +1,5 @@
 all:
   hosts:
     vps:
-      ansible_host: example.com
+      ansible_host: tmp-vps
       ansible_user: root
