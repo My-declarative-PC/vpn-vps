@@ -43,8 +43,6 @@
           - gnupg
           - linux-headers-{{ ansible_facts.kernel }}
           - procps
-          - python3-launchpadlib
-          - software-properties-common
           - sudo
         state: present
 
@@ -114,11 +112,30 @@
         mode: "0440"
         validate: "visudo -cf %s"
 
+    - name: Create Ansible remote tmp for main user
+      ansible.builtin.file:
+        path: "/home/{{ main_user }}/.ansible/tmp"
+        state: directory
+        owner: "{{ main_user }}"
+        group: "{{ main_user }}"
+        mode: "0700"
+
     - name: Add AmneziaWG PPA
-      ansible.builtin.apt_repository:
-        repo: ppa:amnezia/ppa
+      ansible.builtin.deb822_repository:
+        name: amnezia-ppa
+        types: deb
+        uris: https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu
+        suites: "{{ ansible_facts.distribution_release }}"
+        components: main
+        signed_by: https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x75C9DD72C799870E310542E24166F2C257290828
         state: present
+        enabled: true
+      register: amnezia_ppa
+
+    - name: Update apt cache after adding AmneziaWG PPA
+      ansible.builtin.apt:
         update_cache: true
+      when: amnezia_ppa.changed
 
     - name: Install AmneziaWG
       ansible.builtin.apt:
