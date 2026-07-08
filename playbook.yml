@@ -45,7 +45,7 @@
           - file
           - git
           - gnupg
-          - linux-headers-{{ ansible_kernel }}
+          - linux-headers-{{ ansible_facts.kernel }}
           - procps
           - python3-launchpadlib
           - software-properties-common
@@ -77,9 +77,9 @@
         content: |
           Types: deb
           URIs: https://download.docker.com/linux/ubuntu
-          Suites: {{ ansible_distribution_release }}
+          Suites: {{ ansible_facts.distribution_release }}
           Components: stable
-          Architectures: {{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
+          Architectures: {{ ansible_facts.architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }}
           Signed-By: /etc/apt/keyrings/docker.asc
 
     - name: Install Docker packages
@@ -167,6 +167,14 @@
         owner: "{{ main_user }}"
         group: "{{ main_user }}"
         mode: "0600"
+
+    - name: Create sshd runtime directory
+      ansible.builtin.file:
+        path: /run/sshd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
 
     - name: Disable SSH password authentication
       ansible.builtin.lineinfile:
