@@ -19,12 +19,8 @@
         that:
           - main_user is defined
           - main_user | length > 0
-          - main_user_ssh_public_keys is defined
-          - main_user_ssh_public_keys is iterable
-          - main_user_ssh_public_keys is not string
         fail_msg: >-
-          Create vars/user.yml from vars/user.example.yml and set main_user and
-          main_user_ssh_public_keys. main_user_ssh_public_keys can be an empty list.
+          Create vars/user.yml from vars/user.example.yml and set main_user.
 
     - name: Update apt cache
       ansible.builtin.apt:
@@ -118,80 +114,6 @@
         mode: "0440"
         validate: "visudo -cf %s"
 
-    - name: Check root authorized_keys
-      ansible.builtin.stat:
-        path: /root/.ssh/authorized_keys
-      register: root_authorized_keys_stat
-
-    - name: Read root authorized_keys
-      ansible.builtin.slurp:
-        path: /root/.ssh/authorized_keys
-      register: root_authorized_keys_raw
-      when: root_authorized_keys_stat.stat.exists
-
-    - name: Build main user SSH key list
-      ansible.builtin.set_fact:
-        main_user_authorized_keys: >-
-          {{
-            (
-              (root_authorized_keys_raw.content | default('') | b64decode).splitlines()
-              if root_authorized_keys_stat.stat.exists else []
-            )
-            + main_user_ssh_public_keys
-          }}
-
-    - name: Keep only non-empty SSH keys
-      ansible.builtin.set_fact:
-        main_user_authorized_keys: "{{ main_user_authorized_keys | map('trim') | reject('equalto', '') | unique | list }}"
-
-    - name: Abort before locking SSH access if main user has no keys
-      ansible.builtin.assert:
-        that:
-          - main_user_authorized_keys | length > 0
-        fail_msg: >-
-          No SSH public keys found for {{ main_user }}. Add keys to
-          main_user_ssh_public_keys or make sure /root/.ssh/authorized_keys exists.
-
-    - name: Create main user .ssh directory
-      ansible.builtin.file:
-        path: "/home/{{ main_user }}/.ssh"
-        state: directory
-        owner: "{{ main_user }}"
-        group: "{{ main_user }}"
-        mode: "0700"
-
-    - name: Install authorized_keys for main user
-      ansible.builtin.copy:
-        dest: "/home/{{ main_user }}/.ssh/authorized_keys"
-        content: "{{ main_user_authorized_keys | join('\n') }}\n"
-        owner: "{{ main_user }}"
-        group: "{{ main_user }}"
-        mode: "0600"
-
-    - name: Create sshd runtime directory
-      ansible.builtin.file:
-        path: /run/sshd
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Disable SSH password authentication
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^#?PasswordAuthentication\s+'
-        line: PasswordAuthentication no
-        validate: /usr/sbin/sshd -t -f %s
-      notify: Restart ssh
-
-    - name: Disable SSH root login
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^#?PermitRootLogin\s+'
-        line: PermitRootLogin no
-        validate: /usr/sbin/sshd -t -f %s
-      notify: Restart ssh
-
     - name: Add AmneziaWG PPA
       ansible.builtin.apt_repository:
         repo: ppa:amnezia/ppa
@@ -232,10 +154,38 @@
 
     - name: Apply main user dotfiles
       ansible.builtin.command:
-        cmd: "{{ linuxbrew_prefix }}/bin/chezmoi init --apply my-declarative-pc"
+        cmd: >-
+          {{ linuxbrew_prefix }}/bin/chezmoi init --apply
+          --promptBool hasGUI=false
+          --promptBool isHome=true
+          my-declarative-pc
       become_user: "{{ main_user }}"
       args:
         creates: "/home/{{ main_user }}/.local/share/chezmoi"
+
+    - name: Create sshd runtime directory
+      ansible.builtin.file:
+        path: /run/sshd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication\s+'
+        line: PasswordAuthentication no
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Restart ssh
+
+    - name: Disable SSH root login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin\s+'
+        line: PermitRootLogin no
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Restart ssh
 
     - name: Create homelab directory
       ansible.builtin.file:
