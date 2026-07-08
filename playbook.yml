@@ -230,6 +230,13 @@
       register: linuxbrew_package_install
       changed_when: "'already installed' not in linuxbrew_package_install.stderr"
 
+    - name: Apply main user dotfiles
+      ansible.builtin.command:
+        cmd: "{{ linuxbrew_prefix }}/bin/chezmoi init --apply my-declarative-pc"
+      become_user: "{{ main_user }}"
+      args:
+        creates: "/home/{{ main_user }}/.local/share/chezmoi"
+
     - name: Create homelab directory
       ansible.builtin.file:
         path: "{{ homelab_dir }}"
